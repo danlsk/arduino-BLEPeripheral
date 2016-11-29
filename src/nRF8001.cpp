@@ -1,7 +1,7 @@
 // Copyright (c) Sandeep Mistry. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#if !defined(NRF51) && !defined(NRF52) &&!defined(__RFduino__)
+#if !defined(NRF51) && !defined(NRF52) && !defined(__RFduino__) && !defined(__Simblee__)
 
 // #define NRF_8001_DEBUG
 // #define NRF_8001_ENABLE_DC_DC_CONVERTER
@@ -143,10 +143,12 @@ nRF8001::~nRF8001() {
   this->end();
 }
 
-void nRF8001::begin(unsigned char advertisementDataSize,
-                      BLEEirData *advertisementData,
-                      unsigned char scanDataSize,
-                      BLEEirData *scanData,
+void nRF8001::begin(unsigned char advertisementDataType,
+                      unsigned char advertisementDataLength,
+                      const unsigned char* advertisementData,
+                      unsigned char scanDataType,
+                      unsigned char scanDataLength,
+                      const unsigned char* scanData,
                       BLELocalAttribute** localAttributes,
                       unsigned char numLocalAttributes,
                       BLERemoteAttribute** remoteAttributes,
@@ -259,8 +261,8 @@ void nRF8001::begin(unsigned char advertisementDataSize,
 
   setupMsg.status_byte = 0;
 
-  bool hasAdvertisementData = advertisementDataSize && advertisementData;
-  bool hasScanData          = scanDataSize && scanData;
+  bool hasAdvertisementData = advertisementDataType && advertisementDataLength && advertisementData;
+  bool hasScanData          = scanDataType && scanDataLength && scanData;
 
   for (int i = 0; i < NB_BASE_SETUP_MESSAGES; i++) {
     int setupMsgSize = pgm_read_byte_near(&baseSetupMsgs[i].buffer[0]) + 2;
@@ -303,13 +305,13 @@ void nRF8001::begin(unsigned char advertisementDataSize,
         setupMsgData->data[0] |= 0x01;
       }
     } else if (i == 5 && hasAdvertisementData) {
-      setupMsgData->data[0] = advertisementData[0].type;
-      setupMsgData->data[1] = advertisementData[0].length;
-      memcpy(&setupMsgData->data[2], advertisementData[0].data, advertisementData[0].length);
+      setupMsgData->data[0] = advertisementDataType;
+      setupMsgData->data[1] = advertisementDataLength;
+      memcpy(&setupMsgData->data[2], advertisementData, advertisementDataLength);
     } else if (i == 6 && hasScanData) {
-      setupMsgData->data[0] = scanData[0].type;
-      setupMsgData->data[1] = scanData[0].length;
-      memcpy(&setupMsgData->data[2], scanData[0].data, scanData[0].length);
+      setupMsgData->data[0] = scanDataType;
+      setupMsgData->data[1] = scanDataLength;
+      memcpy(&setupMsgData->data[2], scanData, scanDataLength);
     }
 
     this->sendSetupMessage(&setupMsg);

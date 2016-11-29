@@ -4,9 +4,12 @@
 #ifndef _NRF_51822_H_
 #define _NRF_51822_H_
 
-#if defined(__RFduino__)
+#if __RFduino__ 
   #include <utility/RFduino/ble_gatts.h>
   #include <utility/RFduino/ble_gattc.h>
+#elif defined(__Simblee__)
+  #include <utility/Simblee/ble_gatts.h>
+  #include <utility/Simblee/ble_gattc.h>
 #elif defined(NRF5) || defined(NRF51_S130)
   #include <ble_gatts.h>
   #include <ble_gattc.h>
@@ -52,10 +55,12 @@ class nRF51822 : public BLEDevice
 
     virtual ~nRF51822();
 
-    virtual void begin(unsigned char advertisementDataSize,
-                BLEEirData *advertisementData,
-                unsigned char scanDataSize,
-                BLEEirData *scanData,
+    virtual void begin(unsigned char advertisementDataType,
+                unsigned char advertisementDataLength,
+                const unsigned char* advertisementData,
+                unsigned char scanDataType,
+                unsigned char scanDataLength,
+                const unsigned char* scanData,
                 BLELocalAttribute** localAttributes,
                 unsigned char numLocalAttributes,
                 BLERemoteAttribute** remoteAttributes,

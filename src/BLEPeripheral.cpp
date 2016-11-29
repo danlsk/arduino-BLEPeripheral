@@ -14,7 +14,7 @@
 #define DEFAULT_APPEARANCE  0x0000
 
 BLEPeripheral::BLEPeripheral(unsigned char req, unsigned char rdy, unsigned char rst) :
-#if defined(NRF51) || defined(NRF52) || defined(__RFduino__)
+#if defined(NRF51) || defined(NRF52) || defined(__RFduino__) || defined(__Simblee__)
   _nRF51822(),
 #else
   _nRF8001(req, rdy, rst),
@@ -42,7 +42,7 @@ BLEPeripheral::BLEPeripheral(unsigned char req, unsigned char rdy, unsigned char
 
   _central(this)
 {
-#if defined(NRF51) || defined(NRF52) || defined(__RFduino__)
+#if defined(NRF51) || defined(NRF52) || defined(__RFduino__) || defined(__Simblee__)
   this->_device = &this->_nRF51822;
 #else
   this->_device = &this->_nRF8001;
@@ -69,66 +69,52 @@ BLEPeripheral::~BLEPeripheral() {
 }
 
 void BLEPeripheral::begin() {
-  unsigned char advertisementDataSize = 0;
+  unsigned char advertisementDataType = 0;
+  unsigned char scanDataType = 0;
 
-  BLEEirData advertisementData[3];
-  BLEEirData scanData;
+  unsigned char advertisementDataLength = 0;
+  unsigned char scanDataLength = 0;
 
-  scanData.length = 0;
+  unsigned char advertisementData[BLE_ADVERTISEMENT_DATA_MAX_VALUE_LENGTH];
+  unsigned char scanData[BLE_SCAN_DATA_MAX_VALUE_LENGTH];
 
-  unsigned char remainingAdvertisementDataLength = BLE_ADVERTISEMENT_DATA_MAX_VALUE_LENGTH + 2;
   if (this->_serviceSolicitationUuid){
     BLEUuid serviceSolicitationUuid = BLEUuid(this->_serviceSolicitationUuid);
 
-    unsigned char uuidLength = serviceSolicitationUuid.length();
-    advertisementData[advertisementDataSize].length = uuidLength;
-    advertisementData[advertisementDataSize].type = (uuidLength > 2) ? 0x15 : 0x14;
+    advertisementDataLength = serviceSolicitationUuid.length();
+    advertisementDataType = (advertisementDataLength > 2) ? 0x15 : 0x14;
 
-    memcpy(advertisementData[advertisementDataSize].data, serviceSolicitationUuid.data(), uuidLength);
-    advertisementDataSize += 1;
-    remainingAdvertisementDataLength -= uuidLength + 2;
-  }
-  if (this->_advertisedServiceUuid){
+    memcpy(advertisementData, serviceSolicitationUuid.data(), advertisementDataLength);
+  } else if (this->_advertisedServiceUuid){
     BLEUuid advertisedServiceUuid = BLEUuid(this->_advertisedServiceUuid);
 
-    unsigned char uuidLength = advertisedServiceUuid.length();
-    if (uuidLength + 2 <= remainingAdvertisementDataLength) {
-      advertisementData[advertisementDataSize].length = uuidLength;
-      advertisementData[advertisementDataSize].type = (uuidLength > 2) ? 0x06 : 0x02;
+    advertisementDataLength = advertisedServiceUuid.length();
+    advertisementDataType = (advertisementDataLength > 2) ? 0x06 : 0x02;
 
-      memcpy(advertisementData[advertisementDataSize].data, advertisedServiceUuid.data(), uuidLength);
-      advertisementDataSize += 1;
-      remainingAdvertisementDataLength -= uuidLength + 2;
+    memcpy(advertisementData, advertisedServiceUuid.data(), advertisementDataLength);
+  } else if (this->_manufacturerData && this->_manufacturerDataLength > 0) {
+    advertisementDataLength = this->_manufacturerDataLength;
+
+    if (advertisementDataLength > sizeof(advertisementData)) {
+      advertisementDataLength = sizeof(advertisementData);
     }
-  }
-  if (this->_manufacturerData && this->_manufacturerDataLength > 0) {
-    if (remainingAdvertisementDataLength >= 3) {
-      unsigned char dataLength = this->_manufacturerDataLength;
 
-      if (dataLength + 2 > remainingAdvertisementDataLength) {
-        dataLength = remainingAdvertisementDataLength - 2;
-      }
+    advertisementDataType = 0xff;
 
-      advertisementData[advertisementDataSize].length = dataLength;
-      advertisementData[advertisementDataSize].type = 0xff;
-
-      memcpy(advertisementData[advertisementDataSize].data, this->_manufacturerData, dataLength);
-      advertisementDataSize += 1;
-      remainingAdvertisementDataLength -= dataLength + 2;
-    }
+    memcpy(advertisementData, this->_manufacturerData, advertisementDataLength);
   }
 
   if (this->_localName){
     unsigned char localNameLength = strlen(this->_localName);
-    scanData.length = localNameLength;
+    scanDataLength = localNameLength;
 
-    if (scanData.length > BLE_SCAN_DATA_MAX_VALUE_LENGTH) {
-      scanData.length = BLE_SCAN_DATA_MAX_VALUE_LENGTH;
+    if (scanDataLength > sizeof(scanData)) {
+      scanDataLength = sizeof(scanData);
     }
 
-    scanData.type = (localNameLength > scanData.length) ? 0x08 : 0x09;
+    scanDataType = (localNameLength > scanDataLength) ? 0x08 : 0x09;
 
-    memcpy(scanData.data, this->_localName, scanData.length);
+    memcpy(scanData, this->_localName, scanDataLength);
   }
 
   if (this->_localAttributes == NULL) {
@@ -158,8 +144,8 @@ void BLEPeripheral::begin() {
     this->addRemoteAttribute(this->_remoteServicesChangedCharacteristic);
   }
 
-  this->_device->begin(advertisementDataSize, advertisementData,
-                        scanData.length > 0 ? 1 : 0, &scanData,
+  this->_device->begin(advertisementDataType, advertisementDataLength, advertisementData,
+                        scanDataType, scanDataLength, scanData,
                         this->_localAttributes, this->_numLocalAttributes,
                         this->_remoteAttributes, this->_numRemoteAttributes);
 

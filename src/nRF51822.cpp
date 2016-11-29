@@ -1,12 +1,16 @@
 // Copyright (c) Sandeep Mistry. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#if defined(NRF51) || defined(NRF52) || defined(__RFduino__)
+#if defined(NRF51) || defined(NRF52) || defined(__RFduino__) || defined(__Simblee__)
 
-#ifdef __RFduino__
+#ifdef __RFduino__ 
   #include <utility/RFduino/ble.h>
   #include <utility/RFduino/ble_hci.h>
   #include <utility/RFduino/nrf_sdm.h>
+#elif defined(__Simblee__)  
+  #include <utility/Simblee/ble.h>
+  #include <utility/Simblee/ble_hci.h>
+  #include <utility/Simblee/nrf_sdm.h>
 #elif defined(NRF5) || defined(NRF51_S130)
   #include <ble.h>
   #include <ble_hci.h>
@@ -15,7 +19,7 @@
   #include <s110/ble.h>
   #include <s110/ble_hci.h>
   #include <s110/nrf_sdm.h>
-#endif
+#endif 
 
 #if defined(NRF5) || defined(NRF51_S130)
 uint32_t sd_ble_gatts_value_set(uint16_t handle, uint16_t offset, uint16_t* const p_len, uint8_t const * const p_value) {
@@ -46,12 +50,12 @@ uint32_t sd_ble_gatts_value_set(uint16_t handle, uint16_t offset, uint16_t* cons
 nRF51822::nRF51822() :
   BLEDevice(),
 
+  _txBufferCount(0),
+
   _advDataLen(0),
   _broadcastCharacteristic(NULL),
 
   _connectionHandle(BLE_CONN_HANDLE_INVALID),
-
-  _txBufferCount(0),
 
   _numLocalCharacteristics(0),
   _localCharacteristicInfo(NULL),
@@ -76,17 +80,19 @@ nRF51822::~nRF51822() {
   this->end();
 }
 
-void nRF51822::begin(unsigned char advertisementDataSize,
-                      BLEEirData *advertisementData,
-                      unsigned char scanDataSize,
-                      BLEEirData *scanData,
+void nRF51822::begin(unsigned char advertisementDataType,
+                      unsigned char advertisementDataLength,
+                      const unsigned char* advertisementData,
+                      unsigned char scanDataType,
+                      unsigned char scanDataLength,
+                      const unsigned char* scanData,
                       BLELocalAttribute** localAttributes,
                       unsigned char numLocalAttributes,
                       BLERemoteAttribute** remoteAttributes,
                       unsigned char numRemoteAttributes)
 {
 
-#ifdef __RFduino__
+#if defined(__RFduino__) || defined(__Simblee__)
   sd_softdevice_enable(NRF_CLOCK_LFCLKSRC_SYNTH_250_PPM, NULL);
 #elif defined(NRF5) && !defined(S110)
   #if defined(USE_LFRC)
@@ -194,28 +200,22 @@ void nRF51822::begin(unsigned char advertisementDataSize,
 
   this->_advDataLen += 3;
 
-  if (advertisementDataSize && advertisementData) {
-    for (int i = 0; i < advertisementDataSize; i++) {
-      this->_advData[this->_advDataLen + 0] = advertisementData[i].length + 1;
-      this->_advData[this->_advDataLen + 1] = advertisementData[i].type;
-      this->_advDataLen += 2;
+  if (advertisementDataType && advertisementDataLength && advertisementData) {
+    this->_advData[this->_advDataLen + 0] = advertisementDataLength + 1;
+    this->_advData[this->_advDataLen + 1] = advertisementDataType;
+    this->_advDataLen += 2;
 
-      memcpy(&this->_advData[this->_advDataLen], advertisementData[i].data, advertisementData[i].length);
+    memcpy(&this->_advData[this->_advDataLen], advertisementData, advertisementDataLength);
 
-      this->_advDataLen += advertisementData[i].length;
-    }
+    this->_advDataLen += advertisementDataLength;
   }
 
-  if (scanDataSize && scanData) {
-    for (int i = 0; i < scanDataSize; i++) {
-      srData[srDataLen + 0] = scanData[i].length + 1;
-      srData[srDataLen + 1] = scanData[i].type;
-      srDataLen += 2;
+  if (scanDataType && scanDataLength && scanData) {
+    srData[0] = scanDataLength + 1;
+    srData[1] = scanDataType;
+    memcpy(&srData[2], scanData, scanDataLength);
 
-      memcpy(&srData[srDataLen], scanData[i].data, scanData[i].length);
-
-      srDataLen += scanData[i].length;
-    }
+    srDataLen = 2 + scanDataLength;
   }
 
   sd_ble_gap_adv_data_set(this->_advData, this->_advDataLen, srData, srDataLen);
@@ -506,7 +506,10 @@ void nRF51822::begin(unsigned char advertisementDataSize,
 
 #ifdef __RFduino__
   RFduinoBLE_enabled = 1;
+#elif  __Simblee__
+  SimbleeBLE_enabled = 1;  
 #endif
+
 }
 
 void nRF51822::poll() {
@@ -625,7 +628,7 @@ void nRF51822::poll() {
       case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
 #ifdef NRF_51822_DEBUG
         Serial.print(F("Evt Sec Params Request "));
-#if !defined(NRF5) && !defined(NRF51_S130)
+#if !defined(NRF51_S130) && !defined(S110)
         Serial.print(bleEvt->evt.gap_evt.params.sec_params_request.peer_params.timeout);
         Serial.print(F(" "));
 #endif
@@ -1192,7 +1195,8 @@ bool nRF51822::writeRemoteCharacteristic(BLERemoteCharacteristic& characteristic
         ble_gattc_write_params_t writeParams;
 
         writeParams.write_op = (this->_remoteCharacteristicInfo[i].properties.write) ? BLE_GATT_OP_WRITE_REQ : BLE_GATT_OP_WRITE_CMD;
-#ifndef __RFduino__
+//#ifndef __RFduino__
+#if !defined(__RFduino__) && !defined(__Simblee__)
         writeParams.flags = 0;
 #endif
         writeParams.handle = this->_remoteCharacteristicInfo[i].valueHandle;
@@ -1240,7 +1244,8 @@ bool nRF51822::subscribeRemoteCharacteristic(BLERemoteCharacteristic& characteri
         uint16_t value = (this->_remoteCharacteristicInfo[i].properties.notify ? 0x0001 : 0x002);
 
         writeParams.write_op = BLE_GATT_OP_WRITE_REQ;
-#ifndef __RFduino__
+//#ifndef __RFduino__
+#if !defined(__RFduino__) && !defined(__Simblee__)
         writeParams.flags = 0;
 #endif
         writeParams.handle = (this->_remoteCharacteristicInfo[i].valueHandle + 1); // don't discover descriptors for now
@@ -1276,7 +1281,8 @@ bool nRF51822::unsubcribeRemoteCharacteristic(BLERemoteCharacteristic& character
         uint16_t value = 0x0000;
 
         writeParams.write_op = BLE_GATT_OP_WRITE_REQ;
-#ifndef __RFduino__
+//#ifndef __RFduino__
+#if !defined(__RFduino__) && !defined(__Simblee__)
         writeParams.flags = 0;
 #endif
         writeParams.handle = (this->_remoteCharacteristicInfo[i].valueHandle + 1); // don't discover descriptors for now
@@ -1353,7 +1359,8 @@ void nRF51822::requestAddress() {
 }
 
 void nRF51822::requestTemperature() {
-#ifndef __RFduino__
+//#ifndef __RFduino__
+#if !defined(__RFduino__) && !defined(__Simblee__)
   int32_t rawTemperature = 0;
 
   sd_temp_get(&rawTemperature);
